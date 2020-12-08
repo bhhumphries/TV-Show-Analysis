@@ -1,0 +1,466 @@
+---
+title: "Assignment 9 TV Shows on Streaming Platforms"
+author: "Brianna Humphries"
+date: "10/20/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Data Cleaning
+
+```{r clean, echo=TRUE}
+library(readr)
+#Data set found at:
+#https://www.kaggle.com/ruchi798/tv-shows-on-netflix-prime-video-hulu-and-disney
+#Updated May 25, 2020
+#5611 total shows in data set
+tvdata <- read_csv("tv_shows.csv", col_types = cols(X1 = col_skip(), type = col_skip(),
+    `Rotten Tomatoes` = col_character(), 
+    Netflix = col_factor(levels = c("0", "1")), 
+    Hulu = col_factor(levels = c("0", "1")), 
+    `Prime Video` = col_factor(levels = c("0", "1")), 
+    `Disney+` = col_factor(levels = c("0", "1")), 
+    type = col_factor(levels = c("0", "1"))))
+
+#rename variables in data set for easier use
+names(tvdata)[5] <- "RottenTomatoes"
+names(tvdata)[8] <- "PrimeVideo"
+names(tvdata)[9] <- "Disney"
+
+#change variables to factor
+tvdata$Year <- as.factor(tvdata$Year)
+tvdata$Age <- as.factor(tvdata$Age)
+
+#rename Age level all to All, and Platform levels to Yes or No
+library(plyr)
+tvdata$Age <- revalue(tvdata$Age, c("all"="All"))
+tvdata$Netflix <- revalue(tvdata$Netflix, c("0"="No", "1"="Yes"))
+tvdata$Hulu <- revalue(tvdata$Hulu, c("0"="No", "1"="Yes"))
+tvdata$PrimeVideo <- revalue(tvdata$PrimeVideo, c("0"="No", "1"="Yes"))
+tvdata$Disney <- revalue(tvdata$Disney, c("0"="No", "1"="Yes"))
+
+#Order Age groups from young to old
+tvdata$Age <- ordered(tvdata$Age, levels = c("All", "7+", "13+", "16+", "18+"))
+
+#Remove % symbol from Rotten Tomatoes variable and change to numeric
+tvdata$RottenTomatoes <- gsub("%", "", tvdata$RottenTomatoes)
+tvdata$RottenTomatoes <- as.numeric(tvdata$RottenTomatoes)
+
+#Show first 6 rows of dataset
+head(tvdata)
+attach(tvdata)
+```
+### Column Descriptions
+
+**Title**: Title of TV show  
+**Year**: Year in which the TV show was released  (1901-2020)  
+**Age**: Target Age Group (All, 7+, 13+, 16+, 18+)  
+**IMDb**: IMDb rating (0-10)  
+**RottenTomatoes**: Rotten Tomatoes percentage rating (0-100)  
+**Netflix**: Whether the TV show is found on Netflix (Yes or No)  
+**Hulu**: Whether the TV show is found on Hulu (Yes or No)  
+**PrimeVideo**: Whether the TV show is found on Prime Video (Yes or No)  
+**Disney**: Whether the TV show is found on Disney+ (Yes or No)  
+
+### Summary of Data
+```{r summary, echo=TRUE}
+#Show summary of data
+summary(tvdata)
+```
+
+## Variable Distributions
+### Years
+```{r years, echo=TRUE}
+library(ggplot2)
+library(plotly)
+#Years
+#There are no shows in years 1901-1903, 1905-1913, 1915-1930, 1933, 1935-1942, 1944, and 1946
+#Shows every year from 1947-2020
+#No missing values in data set
+yearP <- plot_ly(tvdata, x = ~Year) %>%
+  add_histogram() %>% 
+  layout(title = "Number of TV Shows per Year",
+        xaxis = list(title = "Year"),
+        yaxis = list(title = "Number of TV Shows"))
+yearP
+```
+
+### Age Group
+```{r agegrp, echo=TRUE}
+#Age
+#2446 missing values in data set, so graph includes 3165 observations
+ageNA <- tvdata[complete.cases(tvdata$Age),] #data set without missing age obs.
+ageP <- plot_ly(ageNA, x = ~Age) %>%
+  add_histogram() %>% 
+  layout(title = "Number of TV Shows per Age Group",
+        xaxis = list(title = "Age Group"),
+        yaxis = list(title = "Number of TV Shows"))
+ageP
+```
+
+### IMDb Rating
+```{r imdb, echo=TRUE}
+#IMDb rating
+#1161 missing values in data, so graph includes 4450 observations
+imdbNA <- tvdata[complete.cases(tvdata$IMDb),] #data set without missing IMDb
+imdbP <- plot_ly(imdbNA, x = ~IMDb) %>%
+  add_histogram() %>% 
+  layout(title = "Number of TV Shows per IMDb Rating",
+        xaxis = list(title = "IMDb Rating"),
+        yaxis = list(title = "Number of TV Shows"))
+imdbP
+
+#591 tv shows with IMDb ratings less than 6 (13.3%)
+sum(na.omit(IMDb) < 6)
+#3859 tv shows with IMDb ratings greater than or equal to 6 (86.7%)
+sum(na.omit(IMDb) >= 6)
+```
+
+### Rotten Tomatoes Percent Rating
+```{r rot, echo=TRUE}
+#Rotten Tomatoes
+#4600 missing values, so graph includes 1011 observations
+rotNA <- tvdata[complete.cases(tvdata$RottenTomatoes),] #data set without NA RottenTomatoes
+rotP <- plot_ly(rotNA, x = ~RottenTomatoes) %>%
+  add_histogram() %>% 
+  layout(title = "Number of TV Shows per Rotten Tomatoes Percentage",
+        xaxis = list(title = "Rotten Tomatoes Percentage"),
+        yaxis = list(title = "Number of TV Shows"))
+rotP
+
+#182 tv shows with IMDb ratings less than 6 (18.0%)
+sum(na.omit(RottenTomatoes) < 60)
+#829 tv shows with IMDb ratings greater than or equal to 6 (82.0%)
+sum(na.omit(RottenTomatoes) >= 60)
+```
+
+### Streaming Platforms
+```{r plat, echo=TRUE}
+#number of tv shows in each platform
+#No missing data in each platform
+platMat <- sapply(X = tvdata[6:9], FUN = table) #frequency table
+platforms <- c("Netflix", "Hulu", "Prime Video", "Disney+") #names of platforms
+count_no <- platMat[1:1, 1:4] #extracts frequencies of "No" values
+count_yes <- platMat[2:2, 1:4] #extracts frequencies of "Yes" values
+count_yesN <- count_yes[1] #total number of shows in Netflix - 1931
+count_yesH <- count_yes[2] #total number of shows in Hulu - 1754
+count_yesP <- count_yes[3] #total number of shows in Prime Video - 2144
+count_yesD <- count_yes[4] #total number of shows in Disney - 180
+platdata <- data.frame(platforms, count_yes, count_no) #reorganization of freq table
+#Plot number of tv shows in each platform as a grouped bar chart
+plat <- plot_ly(platdata, x = ~platforms, y = ~count_yes, type = 'bar', name = 'Yes') %>%
+  add_trace(y = ~count_no, name = 'No') %>%
+  layout(title = "Number of TV Shows in Each Streaming Platform",
+                        yaxis = list(title = 'Number of TV Shows'), 
+                        xaxis = list(title = 'Streaming Platform'),
+                        barmode = 'group',
+                        legend = list(title = list(text = "Is the show in the platform?")))
+plat #plot plat
+```
+
+## Correlation between IMDb Rating and Rotten Tomatoes Percentage
+```{r corr, echo=TRUE}
+#data set without missing rating variables
+ratingNA <- tvdata[complete.cases(tvdata$RottenTomatoes, tvdata$IMDb),] #1008 observations
+#fit <- lm(IMDb ~ RottenTomatoes, data=ratingNA) #for regression line
+fit <- ratingNA %>% lm(RottenTomatoes ~ IMDb,.) %>% fitted.values
+#Scatter plot of IMDb vs RottenTomatoes
+ratePlot <- plot_ly(ratingNA, x = ~IMDb, y = ~RottenTomatoes, type="scatter", mode = "markers", text = ~paste("TV Show: ", Title, '<br>Year:', Year)) %>%
+  add_trace(x=~IMDb, y=fit, mode = "lines") %>%
+  layout(title = "IMDb Rating vs. Rotten Tomatoes Percentage", 
+         xaxis = list(title = "IMDb Rating"), 
+         yaxis = list(title = "Rotten Tomatoes Percentage"),
+         showlegend = FALSE)
+ratePlot
+
+#Correlation test between IMDb and Rotten Tomatoes Ratings
+cor.test(RottenTomatoes, IMDb) 
+#p-value is less than 0.05, so correlation is significant
+#Correlation coefficient: 0.489
+```
+
+## Platforms of "High Rating" TV Shows
+```{r topRot, echo=TRUE}
+#Create subset with top Rotten Tomatoes ratings from 80-100% or IMDb ratings from 8-10
+#uses data without missing values since we are counting by platform
+topRatings <- tvdata[which(tvdata$RottenTomatoes >= 80 | tvdata$IMDb >= 8.0),] #658 shows
+
+#create dataset that includes the counts of the number of shows in or not in each platform with high ratings
+platmatTop <- sapply(X = topRatings[6:9], FUN = table)
+count_noTop <- platmatTop[1:1, 1:4] 
+count_yesTop <- platmatTop[2:2, 1:4]
+platdataTop <- data.frame(platforms, count_yesTop, count_noTop)
+
+#Plot of how many shows with high ratings are in or not in each platform
+platTop <- plot_ly(platdataTop, x = ~platforms, y = ~count_yesTop, type = 'bar', name = 'Yes') %>%
+  add_trace(y = ~count_noTop, name = 'No') %>%
+  layout(title = "Number of TV Shows in Each Streaming Platform with High Ratings",
+                        yaxis = list(title = 'Number of TV Shows'), 
+                        xaxis = list(title = 'Streaming Platform'),
+                        barmode = 'group',
+                        legend = list(title = list(text = "Is the show in the platform?")))
+
+#Since data relies on there being a value in either IMDB or RottenTomatoes, then we need new count values that counts the tv shows in each platform when they don't have missings in both IMDb and RottenTomatoes
+#Create dataset that includes values if not missing in both ratings
+library(dplyr)
+ratingNDNA <- full_join(imdbNA, rotNA) #4453 obs
+#count how many of each platform are in this dataset
+platmatNRA <- sapply(X = ratingNDNA[6:9], FUN = table)
+count_noNRA <- platmatNRA[1:1, 1:4] 
+count_yesNRA <- platmatNRA[2:2, 1:4]
+platNA <- data.frame(platforms, count_yesNRA, count_noNRA) #reorganization of freq table
+#Plot number of tv shows in each platform as a grouped bar chart
+#for data without missing values in either IMDb or Rotten Tomatoes
+#Shows that Netflix has more shows than Prime with this dataset
+platNRA <- plot_ly(platNA, x = ~platforms, y = ~count_yesNRA, type = 'bar', name = 'Yes') %>%
+  add_trace(y = ~count_noNRA, name = 'No') %>%
+  layout(title = "Number of TV Shows in Each Streaming Platform (w/o missing)",
+                        yaxis = list(title = 'Number of TV Shows'), 
+                        xaxis = list(title = 'Streaming Platform'),
+                        barmode = 'group',
+                        legend = list(title = list(text = "Is the show in the platform?")))
+platNRA #plot platNRA
+
+#Calculate percent of tv shows that have a high rating
+platTopPercY <- (count_yesTop / count_yesNRA)*100
+platTopPercN <- (count_noTop / count_noNRA)*100
+#Combine into percents and counts into dataset platdatatop
+platdataTop <- cbind(platdataTop, platTopPercY)
+platdataTop <- cbind(platdataTop, platTopPercN)
+platdataTop <- cbind(platdataTop, count_yesNRA)
+platdataTop <- cbind(platdataTop, count_noNRA)
+
+#Percentage is of how many higher rating shows are in/not in the platform over the total number of shows in/not in the platform
+#Ex: 33.4% of shows in Netflix have a high rating
+#Ex: 30.7% of shows not in Prime Video have a high rating
+platTopPercP <- plot_ly(platdataTop, x = ~platforms, y = ~platTopPercY, type = 'bar', name = 'Yes') %>%
+    add_trace(y = ~platTopPercN, name = 'No') %>%
+    layout(title = "Percent of TV Shows in Each Streaming Platform with High Ratings",
+                        yaxis = list(title = 'Percent of TV Shows'), 
+                        xaxis = list(title = 'Streaming Platform'),
+                        barmode = 'group',
+                        legend = list(title = list(text = "Is the show in the platform?")))
+
+platTop #plot top counts
+platTopPercP #plot top percents
+```
+
+## Age Groups of Platforms
+```{r agePlat, echo=TRUE}
+library(purrr)
+#Count how many shows in platforms when missing ages values are taken out
+platMatAgeCount <- sapply(X = ageNA[6:9], FUN = table)
+platforms <- c("Netflix", "Hulu", "Prime Video", "Disney+")
+count_noA <- platMatAgeCount[1:1, 1:4]
+count_yesA <- platMatAgeCount[2:2, 1:4]
+count_yesAN <- count_yesA[1]
+count_yesAH <- count_yesA[2]
+count_yesAP <- count_yesA[3]
+count_yesAD <- count_yesA[4]
+
+#Create datasets for each platform with count levels
+ageNetflix <- ageNA %>% modify_if(is.character, as.factor) %>% group_by(Netflix, Age) %>% tally() %>% filter(Netflix == "Yes") %>% na.omit() %>% ungroup() %>% select(-Netflix) %>% 
+  mutate(NetflixPer = (n / count_yesAN)*100)
+names(ageNetflix)[2] <- "Netflix" 
+
+ageHulu <- ageNA %>% modify_if(is.character, as.factor) %>% group_by(Hulu, Age) %>% tally() %>% filter(Hulu == "Yes") %>% na.omit() %>% ungroup() %>% select(-Hulu) %>% 
+  mutate(HuluPer = (n / count_yesAH)*100)
+names(ageHulu)[2] <- "Hulu" 
+
+agePrime <- ageNA %>% modify_if(is.character, as.factor) %>% group_by(PrimeVideo, Age) %>% tally() %>% filter(PrimeVideo == "Yes") %>% na.omit() %>% ungroup() %>% select(-PrimeVideo) %>% 
+  mutate(PrimePer = (n / count_yesAP)*100)
+names(agePrime)[2] <- "PrimeVideo" 
+
+ageDisney <- ageNA %>% modify_if(is.character, as.factor) %>% group_by(Disney, Age) %>% tally() %>% filter(Disney == "Yes") %>% na.omit() %>% ungroup() %>% select(-Disney) %>% 
+  mutate(DisneyPer = (n / count_yesAD)*100)
+names(ageDisney)[2] <- "Disney" 
+
+#Join datasets by Age and replace any null values to be 0
+agePlatData <- full_join(ageNetflix, ageHulu, by="Age")
+agePlatData <- full_join(agePlatData, agePrime, by="Age")
+agePlatData <- full_join(agePlatData, ageDisney, by="Age")
+agePlatData <- agePlatData %>% mutate_all(~replace(., is.na(.), 0))
+
+#create distribution of platforms for shows without missing ages
+ageplatNA <- plot_ly(platNA, x = ~platforms, y = ~count_yesA, type = 'bar', name = 'Yes') %>%
+  add_trace(y = ~count_noA, name = 'No') %>%
+  layout(title = "Number of TV Shows in Each Streaming Platform (w/o missing)",
+                        yaxis = list(title = 'Number of TV Shows'), 
+                        xaxis = list(title = 'Streaming Platform'),
+                        barmode = 'group',
+                        legend = list(title = list(text = "Is the show in the platform?")))
+ageplatNA #plot
+
+#Create plot of count of ages by platforms
+agePlat <- plot_ly(agePlatData, x = ~Age, y = ~Netflix, type = 'bar', name = 'Netflix', marker = list(color = "firebrick")) %>%
+    add_trace(y = ~Hulu, name = 'Hulu', marker = list(color = "#00EE76")) %>%
+    add_trace(y = ~PrimeVideo, name = 'Prime Video', marker = list(color = "#000033")) %>%
+    add_trace(y = ~Disney, name = 'Disney+', marker = list(color = "#0A47CC")) %>%
+    layout(title = "Number of Shows of Each Rating in Each Platform",
+                        yaxis = list(title = 'Number Of Shows'), 
+                        xaxis = list(title = 'Age Group'),
+                        barmode = 'group',
+                        legend = list(title = list(text = "Platform")))
+
+#Create plot of percent of ages by platforms
+agePlatPer <- plot_ly(agePlatData, x = ~Age, y = ~NetflixPer, type = 'bar', name = 'Netflix', marker = list(color = "firebrick")) %>%
+    add_trace(y = ~HuluPer, name = 'Hulu', marker = list(color = "#00EE76")) %>%
+    add_trace(y = ~PrimePer, name = 'Prime Video', marker = list(color = "#000033")) %>%
+    add_trace(y = ~DisneyPer, name = 'Disney+', marker = list(color = "#0A47CC")) %>%
+    layout(title = "Percent of TV Shows in Each Age Group for Each Platform",
+                        yaxis = list(title = 'Percent of TV Shows in Platform'), 
+                        xaxis = list(title = 'Age Group'),
+                        barmode = 'group',
+                        legend = list(title = list(text = "Platform")))
+agePlat
+agePlatPer
+```
+
+## Platforms Content by Release Year
+```{r platYear, echo=TRUE}
+#create data sets with counts of tv shows per year for each platform
+yearNetflix <- tvdata %>% modify_if(is.character, as.factor) %>% group_by(Netflix, Year) %>% tally() %>% filter(Netflix == "Yes") %>% na.omit() %>% ungroup() %>% select(-Netflix) %>% 
+  mutate(NetflixPer = (n / count_yesN)*100)
+names(yearNetflix)[2] <- "Netflix" 
+
+yearHulu <- tvdata %>% modify_if(is.character, as.factor) %>% group_by(Hulu, Year) %>% tally() %>% filter(Hulu == "Yes") %>% na.omit() %>% ungroup() %>% select(-Hulu) %>% 
+  mutate(HuluPer = (n / count_yesH)*100)
+names(yearHulu)[2] <- "Hulu" 
+
+yearPrime <- tvdata %>% modify_if(is.character, as.factor) %>% group_by(PrimeVideo, Year) %>% tally() %>% filter(PrimeVideo == "Yes") %>% na.omit() %>% ungroup() %>% select(-PrimeVideo) %>% 
+  mutate(PrimePer = (n / count_yesP)*100)
+names(yearPrime)[2] <- "PrimeVideo" 
+
+yearDisney <- tvdata %>% modify_if(is.character, as.factor) %>% group_by(Disney, Year) %>% tally() %>% filter(Disney == "Yes") %>% na.omit() %>% ungroup() %>% select(-Disney) %>% 
+  mutate(DisneyPer = (n / count_yesD)*100)
+names(yearDisney)[2] <- "Disney" 
+
+#join datasets and replace NAs with 0
+yearPlatData <- full_join(yearNetflix, yearHulu, by="Year")
+yearPlatData <- full_join(yearPlatData, yearPrime, by="Year")
+yearPlatData <- full_join(yearPlatData, yearDisney, by="Year")
+yearPlatData <- yearPlatData %>% mutate_all(~replace(., is.na(.), 0))
+yearPlatData$Year <- as.factor(yearPlatData$Year)
+yearPlatData <- yearPlatData[order(yearPlatData$Year),] #order Years
+
+#plot of show count per year per platform
+yearPlatPlot <- plot_ly(yearPlatData, x = ~Year, y = ~Netflix, type = 'scatter', mode = "lines", name = 'Netflix', line = list(color = "firebrick")) %>%
+    add_trace(y = ~Hulu, name = 'Hulu', mode="lines", line = list(color = "#00EE76")) %>%
+    add_trace(y = ~PrimeVideo, name = 'Prime Video', mode="lines", line = list(color = "#000033")) %>%
+    add_trace(y = ~Disney, name = 'Disney+', mode="lines", line = list(color = "#0A47CC")) %>%
+    layout(title = "Each Platform's Content Available by Release Year",
+                        yaxis = list(title = 'Number of TV Shows'), 
+                        xaxis = list(title = 'Year'),
+                        legend = list(title = list(text = "Platform")))
+
+yearPlatPlot
+
+#plot of show percent per year per platform
+yearPlatPlotPer <- plot_ly(yearPlatData, x = ~Year, y = ~NetflixPer, type = 'scatter', mode = "lines", name = 'Netflix', line = list(color = "firebrick")) %>%
+    add_trace(y = ~HuluPer, name = 'Hulu', mode="lines", line = list(color = "#00EE76")) %>%
+    add_trace(y = ~PrimePer, name = 'Prime Video', mode="lines", line = list(color = "#000033")) %>%
+    add_trace(y = ~DisneyPer, name = 'Disney+', mode="lines", line = list(color = "#0A47CC")) %>%
+    layout(title = "Each Platform's Content Available by Release Year",
+                        yaxis = list(title = 'Percent of TV Shows in Platform'), 
+                        xaxis = list(title = 'Year'),
+                        legend = list(title = list(text = "Platform")))
+
+yearPlatPlotPer
+
+```
+
+## Relation of Different Platforms
+```{r alluv, echo=TRUE}
+# create alluvial diagram
+library(ggalluvial)
+library(ggfittext)
+Nalluv <- ggplot(tvdata, aes(axis1 = Netflix, axis2 = Hulu, axis3 = PrimeVideo, axis4 = Disney, y = stat(count))) + 
+  geom_alluvium(aes(fill=Netflix), knot.pos=0) +
+  geom_stratum(alpha=.5) + 
+  geom_text(stat = "stratum", aes(label= after_stat(stratum))) + 
+  scale_x_discrete(limits = c("Netflix", "Hulu", "Prime Video", "Disney"), expand = c(.1, .1)) +
+  labs(title = "TV Shows of Streaming Platforms", subtitle = "stratified by Netflix", 
+       y = "Frequency") + 
+  theme_minimal()
+
+Halluv <- ggplot(tvdata, aes(axis1 = Netflix, axis2 = Hulu, axis3 = PrimeVideo, axis4 = Disney, y = stat(count))) + 
+  geom_alluvium(aes(fill=Hulu), knot.pos=0) +
+  geom_stratum(alpha=.5) + 
+  geom_text(stat = "stratum", aes(label= after_stat(stratum))) + 
+  scale_x_discrete(limits = c("Netflix", "Hulu", "Prime Video", "Disney"), expand = c(.1, .1)) +
+  labs(title = "TV Shows of Streaming Platforms", subtitle = "stratified by Hulu", 
+       y = "Frequency") + 
+  theme_minimal()
+
+Palluv <- ggplot(tvdata, aes(axis1 = Netflix, axis2 = Hulu, axis3 = PrimeVideo, axis4 = Disney, y = stat(count))) + 
+  geom_alluvium(aes(fill=PrimeVideo), knot.pos=0) +
+  geom_stratum(alpha=.5) + 
+  geom_text(stat = "stratum", aes(label= after_stat(stratum))) + 
+  scale_x_discrete(limits = c("Netflix", "Hulu", "Prime Video", "Disney"), expand = c(.1, .1)) +
+  labs(title = "TV Shows of Streaming Platforms", subtitle = "stratified by Prime Video", 
+       y = "Frequency") + 
+  theme_minimal()
+
+Dalluv <- ggplot(tvdata, aes(axis1 = Netflix, axis2 = Hulu, axis3 = PrimeVideo, axis4 = Disney, y = stat(count))) + 
+  geom_alluvium(aes(fill=Disney), knot.pos=0) +
+  geom_stratum(alpha=.5) + 
+  geom_text(stat = "stratum", aes(label= after_stat(stratum))) + 
+  scale_x_discrete(limits = c("Netflix", "Hulu", "Prime Video", "Disney"), expand = c(.1, .1)) +
+  labs(title = "TV Shows of Streaming Platforms", subtitle = "stratified by Disney+", 
+       y = "Frequency") + 
+  theme_minimal()
+
+Nalluv
+Halluv
+Palluv
+Dalluv
+```
+
+```{r freq3, echo=TRUE}
+#There are no shows that are in all 4 platforms
+plat4 <- tvdata[which(tvdata$Netflix == "Yes" & tvdata$Hulu == "Yes" & tvdata$PrimeVideo == "Yes" & tvdata$Disney == "Yes"),]
+
+#How many shows are on 3 platforms
+#Not in Disney - 31
+plat3NHP_D <- tvdata[which(tvdata$Netflix == "Yes" & tvdata$Hulu == "Yes" & tvdata$PrimeVideo == "Yes" & tvdata$Disney == "No"),]
+#Not in Hulu - 0
+plat3N_HPD <- tvdata[which(tvdata$Netflix == "Yes" & tvdata$Hulu == "No" & tvdata$PrimeVideo == "Yes" & tvdata$Disney == "Yes"),]
+#Not in Netflix - 0
+plat3_NHPD <- tvdata[which(tvdata$Netflix == "No" & tvdata$Hulu == "Yes" & tvdata$PrimeVideo == "Yes" & tvdata$Disney == "Yes"),]
+#Not in Prime - 1
+plat3NH_PD <- tvdata[which(tvdata$Netflix == "Yes" & tvdata$Hulu == "Yes" & tvdata$PrimeVideo == "No" & tvdata$Disney == "Yes"),]
+head(plat3NH_PD)
+#Combine into 1 dataset - 32 (0.57% of data set)
+plat3 <- rbind(plat3NHP_D, plat3NH_PD)
+
+#How many shows are on 1 platforms
+#Only in Netflix - 1748 - 90.5% of Netflix
+plat1N <- tvdata[which(tvdata$Netflix == "Yes" & tvdata$Hulu == "No" & tvdata$PrimeVideo == "No" & tvdata$Disney == "No"),]
+#Only in Hulu - 1452 - 82.8% of Hulu
+plat1H <- tvdata[which(tvdata$Netflix == "No" & tvdata$Hulu == "Yes" & tvdata$PrimeVideo == "No" & tvdata$Disney == "No"),]
+#Only in Prime - 1889 - 88.1% of Prime Video
+plat1P <- tvdata[which(tvdata$Netflix == "No" & tvdata$Hulu == "No" & tvdata$PrimeVideo == "Yes" & tvdata$Disney == "No"),]
+#Only in Disney - 156 - 87.7& of Disney+
+plat1D <- tvdata[which(tvdata$Netflix == "No" & tvdata$Hulu == "No" & tvdata$PrimeVideo == "No" & tvdata$Disney == "Yes"),]
+#Combine into 1 dataset - 5245 obs (93.5% of data set)
+plat1 <- rbind(plat1N, plat1H, plat1P, plat1D)
+
+#How many shows are on 2 platforms
+#In Netflix and Hulu - 87
+plat2NH <- tvdata[which(tvdata$Netflix == "Yes" & tvdata$Hulu == "Yes" & tvdata$PrimeVideo == "No" & tvdata$Disney == "No"),]
+#In Netflix and Prime - 59
+plat2NP <- tvdata[which(tvdata$Netflix == "Yes" & tvdata$Hulu == "No" & tvdata$PrimeVideo == "Yes" & tvdata$Disney == "No"),]
+#In Netflix and Disney - 5
+plat2ND <- tvdata[which(tvdata$Netflix == "Yes" & tvdata$Hulu == "No" & tvdata$PrimeVideo == "No" & tvdata$Disney == "Yes"),]
+#In Hulu and Prime - 165
+plat2HP <- tvdata[which(tvdata$Netflix == "No" & tvdata$Hulu == "Yes" & tvdata$PrimeVideo == "Yes" & tvdata$Disney == "No"),]
+#In Hulu and Disney - 18
+plat2HD <- tvdata[which(tvdata$Netflix == "No" & tvdata$Hulu == "Yes" & tvdata$PrimeVideo == "No" & tvdata$Disney == "Yes"),]
+#In Prime and Disney - 0
+plat2PD <- tvdata[which(tvdata$Netflix == "No" & tvdata$Hulu == "No" & tvdata$PrimeVideo == "Yes" & tvdata$Disney == "Yes"),]
+#Combine into 1 dataset - 334 obs (5.95% of data set)
+plat2 <- rbind(plat2NH, plat2NP, plat2ND, plat2HP, plat2HD, plat2PD)
+```
